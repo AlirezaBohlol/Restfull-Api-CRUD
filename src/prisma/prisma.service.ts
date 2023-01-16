@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Global } from '@nestjs/common/decorators';
 import { PrismaClient } from '@prisma/client';
 
 @Injectable()
