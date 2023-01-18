@@ -20,7 +20,7 @@ model User {
   updatedAt DateTime   @updatedAt
   Bookmark  Bookmark[]
 
-  @@map("users")
+  @@map("user")
 } 
 
 model Bookmark {

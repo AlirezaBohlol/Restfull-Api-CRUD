@@ -1,14 +1,17 @@
 import { Injectable } from "@nestjs/common";
-import { AuthDTO } from "src/dto";
+import { AuthDTO } from "src/auth/dto";
 import { PrismaService } from "src/prisma/prisma.service";
 import * as argon2 from 'argon2'
-import { PrismaClientExtensionError, PrismaClientKnownRequestError } from "@prisma/client/runtime";
+import { PrismaClientKnownRequestError } from "@prisma/client/runtime";
 import { ForbiddenException } from "@nestjs/common/exceptions";
+import { JwtService } from "@nestjs/jwt/dist";
+import { ConfigService } from '@nestjs/config/dist';
+
 // import * as argonService from "services/argon2";
 
 @Injectable()
 export class AuthService {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(private prisma: PrismaService, private jwt: JwtService, private config: ConfigService) { }
 
     async signUp(dto: AuthDTO) {
         // generate the password hash 
@@ -22,21 +25,60 @@ export class AuthService {
                     hash,
                 }
             })
-            delete user.hash
             // return the save user
-            return user
+            return this.signJwt(user.id, user.email)
 
         } catch (error) {
-           if(error instanceof PrismaClientKnownRequestError){
-            if(error.code==='P2002'){
-                throw new ForbiddenException('Credentials taken')
+            if (error instanceof PrismaClientKnownRequestError) {
+                if (error.code === 'P2002') {
+                    throw new ForbiddenException('Credentials taken')
+                }
             }
-           }
-           throw error
+            throw error
         }
     }
 
-    signIn() {
-        return 'hello'
+    async signIn(dto: AuthDTO) {
+        //find the user by email
+        const user = await this.prisma.user.findUnique({
+            where: {
+                email: dto.email
+            }
+        })
+        // if user dose not exist throw exception
+        if (!user) {
+            throw new ForbiddenException('credentials incorrect')
+        }
+        // compare password 
+        const pwMatches = await argon2.verify(user.hash, dto.password)
+        // if password incorrect throw excepting
+        if (!pwMatches) {
+            throw new ForbiddenException('credential incorrect')
+        }
+        // send back the user
+
+        return this.signJwt(user.id, user.email)
     }
+
+
+    async signJwt(userId: number, email: string): Promise<{ access_token: string }> {
+
+        const payload = {
+            id: userId,
+            email
+        }
+        const secret = this.config.get('JWT_SECRET')
+
+        const token = await this.jwt.signAsync(payload, {
+            expiresIn: "15m",
+            secret
+        })
+
+        return {
+            access_token: token
+        }
+    }
+
+
+
 }
